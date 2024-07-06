@@ -78,6 +78,14 @@ namespace Api.Controllers
             return File(file.FileContent, file.FileType, file.FileName);
         }
 
+        [AllowAnonymous]
+        [HttpGet("filter")]
+        public IActionResult GetFilteredPosts([FromQuery] string fileType, [FromQuery] string searchTerm)
+        {
+            var posts = _postService.GetFilteredPosts(fileType, searchTerm);
+            return Ok(posts);
+        }
+
         private int GetUserIdFromToken()
         {
             var user = (Api.Entities.User)HttpContext.Items["User"];

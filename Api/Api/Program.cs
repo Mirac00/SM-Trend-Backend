@@ -10,35 +10,50 @@ using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
 using System.Text;
+using Microsoft.AspNetCore.Http.Features;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// add services to DI container
+// Add services to DI container
 {
     var services = builder.Services;
     var env = builder.Environment;
 
-    // use sql server db in production and sqlite db in development
+    // Configure to handle large files
+    services.Configure<FormOptions>(options =>
+    {
+        options.MultipartBodyLengthLimit = 1073741824; // 1GB
+    });
+
+    // Use SQL Server DB in production and SQLite DB in development
     if (env.IsProduction())
         services.AddDbContext<DataContext>();
     else
         services.AddDbContext<DataContext, SqliteDataContext>();
 
-    services.AddCors();
+    // Configure CORS
+    services.AddCors(options =>
+    {
+        options.AddPolicy("AllowAllOrigins", builder =>
+        {
+            builder.AllowAnyOrigin()
+                   .AllowAnyMethod()
+                   .AllowAnyHeader();
+        });
+    });
+
     services.AddControllers();
 
-    // configure automapper with all automapper profiles from this assembly
+    // Configure AutoMapper with all AutoMapper profiles from this assembly
     services.AddAutoMapper(typeof(Program));
 
-    // configure strongly typed settings object
+    // Configure strongly typed settings object
     services.Configure<AppSettings>(builder.Configuration.GetSection("AppSettings"));
 
-    // configure DI for application services
+    // Configure DI for application services
     services.AddScoped<IJwtUtils, JwtUtils>();
     services.AddScoped<IUserService, UserService>();
-    // ...
     services.AddScoped<IPostService, PostService>();
-    // ...
 
     // Add authentication services
     services.AddAuthentication(options =>
@@ -82,9 +97,12 @@ var builder = WebApplication.CreateBuilder(args);
                     {
                         Type = ReferenceType.SecurityScheme,
                         Id = "Bearer"
-                    }
+                    },
+                    Scheme = "oauth2",
+                    Name = "Bearer",
+                    In = ParameterLocation.Header
                 },
-                new string[] {}
+                new List<string>()
             }
         });
     });
@@ -92,22 +110,19 @@ var builder = WebApplication.CreateBuilder(args);
 
 var app = builder.Build();
 
-// migrate any database changes on startup (includes initial db creation)
+// Migrate any database changes on startup (includes initial db creation)
 using (var scope = app.Services.CreateScope())
 {
     var dataContext = scope.ServiceProvider.GetRequiredService<DataContext>();
     dataContext.Database.Migrate();
 }
 
-// configure HTTP request pipeline
+// Configure HTTP request pipeline
 {
-    // global cors policy
-    app.UseCors(x => x
-        .AllowAnyOrigin()
-        .AllowAnyMethod()
-        .AllowAnyHeader());
+    // Global CORS policy
+    app.UseCors("AllowAllOrigins");
 
-    // global error handler
+    // Global error handler
     app.UseMiddleware<ErrorHandlerMiddleware>();
 
     // Enable routing
@@ -117,7 +132,7 @@ using (var scope = app.Services.CreateScope())
     app.UseAuthentication();
     app.UseAuthorization();
 
-    // custom jwt auth middleware
+    // Custom JWT auth middleware
     app.UseMiddleware<JwtMiddleware>();
 
     // Add Swagger middleware

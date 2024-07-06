@@ -56,10 +56,32 @@ namespace Api.Controllers
             return Ok(new { message = "Post deleted successfully" });
         }
 
+        [HttpPost("{postId}/files")]
+        public IActionResult AddFileToPost(int postId, [FromBody] PostFileRequest model)
+        {
+            _postService.AddFileToPost(postId, model);
+            return Ok(new { message = "File added successfully" });
+        }
+
+        [HttpDelete("{postId}/files/{fileId}")]
+        public IActionResult RemoveFileFromPost(int postId, int fileId)
+        {
+            _postService.RemoveFileFromPost(postId, fileId);
+            return Ok(new { message = "File removed successfully" });
+        }
+
+        [AllowAnonymous]
+        [HttpGet("{postId}/files/{fileId}")]
+        public IActionResult GetFile(int postId, int fileId)
+        {
+            var file = _postService.GetFile(postId, fileId);
+            return File(file.FileContent, file.FileType, file.FileName);
+        }
+
         private int GetUserIdFromToken()
         {
             var user = (Api.Entities.User)HttpContext.Items["User"];
-            var userId = user?.Id ?? 0; // Użyj właściwości Id lub odpowiedniej właściwości, która przechowuje identyfikator użytkownika
+            var userId = user?.Id ?? 0;
             return userId;
         }
     }

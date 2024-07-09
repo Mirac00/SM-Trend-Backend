@@ -104,6 +104,14 @@ namespace Api.Controllers
             return Ok(new { message = "Post disliked successfully" });
         }
 
+        [AllowAnonymous]
+        [HttpGet("top-liked")]
+        public IActionResult GetTopLikedPosts()
+        {
+            var posts = _postService.GetTopLikedPosts();
+            return Ok(posts);
+        }
+
 
         private int GetUserIdFromToken()
         {

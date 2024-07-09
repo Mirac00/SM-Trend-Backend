@@ -21,6 +21,7 @@ namespace Api.Services
         IEnumerable<PostResponse> GetFilteredPosts(string fileType, string searchTerm);
         void LikePost(PostLikeDislikeRequest model);
         void DislikePost(PostLikeDislikeRequest model);
+        IEnumerable<PostResponse> GetTopLikedPosts(); // Nowa metoda
     }
 
     public class PostService : IPostService
@@ -126,6 +127,43 @@ namespace Api.Services
             };
 
             return postResponse;
+        }
+
+        public IEnumerable<PostResponse> GetTopLikedPosts()
+        {
+            var posts = _context.Posts
+                .Include(p => p.User)
+                .Include(p => p.Files)
+                .OrderByDescending(p => _context.PostLikeDislikes.Count(l => l.PostId == p.Id && l.IsLike))
+                .Take(10)
+                .ToList();
+
+            var postResponses = posts.Select(p => new PostResponse
+            {
+                Id = p.Id,
+                Title = p.Title,
+                Content = p.Content,
+                UserId = p.UserId,
+                User = new UserResponse
+                {
+                    Id = p.User.Id,
+                    FirstName = p.User.FirstName,
+                    LastName = p.User.LastName,
+                    Username = p.User.Username
+                },
+                Files = p.Files.Select(f => new PostFileResponse
+                {
+                    Id = f.Id,
+                    FileName = f.FileName,
+                    FileType = f.FileType,
+                    FileUrl = GenerateFileUrl(f),
+                    PostId = f.PostId
+                }).ToList(),
+                Likes = _context.PostLikeDislikes.Count(l => l.PostId == p.Id && l.IsLike),
+                Dislikes = _context.PostLikeDislikes.Count(l => l.PostId == p.Id && !l.IsLike)
+            }).ToList();
+
+            return postResponses;
         }
 
         public void Update(int id, UpdatePostRequest model, int userId)

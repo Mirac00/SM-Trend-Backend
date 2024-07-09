@@ -32,7 +32,7 @@ namespace Api.Controllers
             var posts = _postService.GetAllWithUser();
             return Ok(posts);
         }
-
+        [AllowAnonymous]
         [HttpGet("{id}")]
         public IActionResult GetById(int id)
         {
@@ -85,6 +85,25 @@ namespace Api.Controllers
             var posts = _postService.GetFilteredPosts(fileType, searchTerm);
             return Ok(posts);
         }
+
+        [HttpPost("like")]
+        public IActionResult LikePost([FromBody] PostLikeDislikeRequest model)
+        {
+            var userId = GetUserIdFromToken();
+            model.UserId = userId;
+            _postService.LikePost(model);
+            return Ok(new { message = "Post liked successfully" });
+        }
+
+        [HttpPost("dislike")]
+        public IActionResult DislikePost([FromBody] PostLikeDislikeRequest model)
+        {
+            var userId = GetUserIdFromToken();
+            model.UserId = userId;
+            _postService.DislikePost(model);
+            return Ok(new { message = "Post disliked successfully" });
+        }
+
 
         private int GetUserIdFromToken()
         {

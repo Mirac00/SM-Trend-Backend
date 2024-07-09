@@ -8,6 +8,8 @@
         public int UserId { get; set; }
         public UserResponse User { get; set; }
         public List<PostFileResponse> Files { get; set; }
+        public int Likes { get; set; } // Dodane pole dla like'ów
+        public int Dislikes { get; set; } // Dodane pole dla dislike'ów
     }
 
     public class UserResponse

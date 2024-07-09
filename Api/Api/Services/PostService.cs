@@ -12,13 +12,15 @@ namespace Api.Services
     {
         void Create(CreatePostRequest model, int userId);
         IEnumerable<PostResponse> GetAllWithUser();
-        Post GetById(int id);
+        PostResponse GetById(int id); // Zmiana typu zwracanego na PostResponse
         void Update(int id, UpdatePostRequest model, int userId);
         void Delete(int id, int userId);
         void AddFileToPost(int postId, PostFileRequest model);
         void RemoveFileFromPost(int postId, int fileId);
         PostFile GetFile(int postId, int fileId);
         IEnumerable<PostResponse> GetFilteredPosts(string fileType, string searchTerm);
+        void LikePost(PostLikeDislikeRequest model);
+        void DislikePost(PostLikeDislikeRequest model);
     }
 
     public class PostService : IPostService
@@ -80,24 +82,50 @@ namespace Api.Services
                     FileType = f.FileType,
                     FileUrl = GenerateFileUrl(f),
                     PostId = f.PostId
-                }).ToList()
+                }).ToList(),
+                Likes = _context.PostLikeDislikes.Count(l => l.PostId == p.Id && l.IsLike),
+                Dislikes = _context.PostLikeDislikes.Count(l => l.PostId == p.Id && !l.IsLike)
             }).ToList();
 
             return postResponses;
         }
 
-        public Post GetById(int id)
+        public PostResponse GetById(int id)
         {
-            var post = _context.Posts.Include(p => p.Files).FirstOrDefault(p => p.Id == id);
+            var post = _context.Posts
+                .Include(p => p.User)
+                .Include(p => p.Files)
+                .FirstOrDefault(p => p.Id == id);
+
             if (post == null)
                 throw new KeyNotFoundException("Post not found");
 
-            foreach (var file in post.Files)
+            var postResponse = new PostResponse
             {
-                file.FileUrl = GenerateFileUrl(file); // Ustaw URL pliku
-            }
+                Id = post.Id,
+                Title = post.Title,
+                Content = post.Content,
+                UserId = post.UserId,
+                User = new UserResponse
+                {
+                    Id = post.User.Id,
+                    FirstName = post.User.FirstName,
+                    LastName = post.User.LastName,
+                    Username = post.User.Username
+                },
+                Files = post.Files.Select(f => new PostFileResponse
+                {
+                    Id = f.Id,
+                    FileName = f.FileName,
+                    FileType = f.FileType,
+                    FileUrl = GenerateFileUrl(f),
+                    PostId = f.PostId
+                }).ToList(),
+                Likes = _context.PostLikeDislikes.Count(l => l.PostId == post.Id && l.IsLike),
+                Dislikes = _context.PostLikeDislikes.Count(l => l.PostId == post.Id && !l.IsLike)
+            };
 
-            return post;
+            return postResponse;
         }
 
         public void Update(int id, UpdatePostRequest model, int userId)
@@ -220,10 +248,64 @@ namespace Api.Services
                     FileType = f.FileType,
                     FileUrl = GenerateFileUrl(f),
                     PostId = f.PostId
-                }).ToList()
+                }).ToList(),
+                Likes = _context.PostLikeDislikes.Count(l => l.PostId == p.Id && l.IsLike),
+                Dislikes = _context.PostLikeDislikes.Count(l => l.PostId == p.Id && !l.IsLike)
             }).ToList();
 
             return postResponses;
+        }
+
+        public void LikePost(PostLikeDislikeRequest model)
+        {
+            var existingLike = _context.PostLikeDislikes
+                .FirstOrDefault(l => l.PostId == model.PostId && l.UserId == model.UserId);
+
+            if (existingLike != null)
+            {
+                if (existingLike.IsLike) return;
+
+                existingLike.IsLike = true;
+            }
+            else
+            {
+                var like = new PostLikeDislike
+                {
+                    PostId = model.PostId,
+                    UserId = model.UserId,
+                    IsLike = true
+                };
+
+                _context.PostLikeDislikes.Add(like);
+            }
+
+            _context.SaveChanges();
+        }
+
+        public void DislikePost(PostLikeDislikeRequest model)
+        {
+            var existingLike = _context.PostLikeDislikes
+                .FirstOrDefault(l => l.PostId == model.PostId && l.UserId == model.UserId);
+
+            if (existingLike != null)
+            {
+                if (!existingLike.IsLike) return;
+
+                existingLike.IsLike = false;
+            }
+            else
+            {
+                var dislike = new PostLikeDislike
+                {
+                    PostId = model.PostId,
+                    UserId = model.UserId,
+                    IsLike = false
+                };
+
+                _context.PostLikeDislikes.Add(dislike);
+            }
+
+            _context.SaveChanges();
         }
 
         private Post GetPost(int id)

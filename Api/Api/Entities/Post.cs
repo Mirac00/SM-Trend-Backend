@@ -10,7 +10,7 @@ namespace Api.Entities
         public int UserId { get; set; }
         public User User { get; set; }
         public ICollection<PostFile> Files { get; set; } = new List<PostFile>();
-        public int Likes { get; set; } // Dodane pole dla like'ów
-        public int Dislikes { get; set; } // Dodane pole dla dislike'ów
+        public int Likes { get; set; } // Liczba like'ów
+        public int Dislikes { get; set; } // Liczba dislike'ów
     }
 }

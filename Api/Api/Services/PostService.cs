@@ -12,7 +12,7 @@ namespace Api.Services
     {
         void Create(CreatePostRequest model, int userId);
         IEnumerable<PostResponse> GetAllWithUser();
-        PostResponse GetById(int id); // Zmiana typu zwracanego na PostResponse
+        PostResponse GetById(int id);
         void Update(int id, UpdatePostRequest model, int userId);
         void Delete(int id, int userId);
         void AddFileToPost(int postId, PostFileRequest model);
@@ -21,7 +21,7 @@ namespace Api.Services
         IEnumerable<PostResponse> GetFilteredPosts(string fileType, string searchTerm);
         void LikePost(PostLikeDislikeRequest model);
         void DislikePost(PostLikeDislikeRequest model);
-        IEnumerable<PostResponse> GetTopLikedPosts(); // Nowa metoda
+        IEnumerable<PostResponse> GetTopLikedPosts();
     }
 
     public class PostService : IPostService
@@ -318,6 +318,9 @@ namespace Api.Services
             }
 
             _context.SaveChanges();
+
+            // Aktualizacja liczników like'ów i dislike'ów
+            UpdatePostLikeDislikeCounts(model.PostId);
         }
 
         public void DislikePost(PostLikeDislikeRequest model)
@@ -344,6 +347,9 @@ namespace Api.Services
             }
 
             _context.SaveChanges();
+
+            // Aktualizacja liczników like'ów i dislike'ów
+            UpdatePostLikeDislikeCounts(model.PostId);
         }
 
         private Post GetPost(int id)
@@ -353,6 +359,18 @@ namespace Api.Services
                 throw new KeyNotFoundException("Post not found");
 
             return post;
+        }
+
+        private void UpdatePostLikeDislikeCounts(int postId)
+        {
+            var post = _context.Posts.FirstOrDefault(p => p.Id == postId);
+            if (post != null)
+            {
+                post.Likes = _context.PostLikeDislikes.Count(l => l.PostId == postId && l.IsLike);
+                post.Dislikes = _context.PostLikeDislikes.Count(l => l.PostId == postId && !l.IsLike);
+                _context.Posts.Update(post);
+                _context.SaveChanges();
+            }
         }
 
         private string GenerateFileUrl(PostFile file)

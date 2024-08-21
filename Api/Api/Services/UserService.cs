@@ -42,6 +42,24 @@ namespace Api.Services
             var userId = int.Parse(jwtToken.Claims.First(x => x.Type == "id").Value);
             return GetById(userId);
         }
+
+        public void Update(int id, UpdateRequest model)
+        {
+            var user = GetUser(id);
+
+            if (model.Username != user.Username && _context.Users.Any(x => x.Username == model.Username))
+                throw new AppException("Username '" + model.Username + "' is already taken");
+
+            // Hash password if it was provided
+            if (!string.IsNullOrEmpty(model.Password))
+                user.PasswordHash = BCrypt.Net.BCrypt.HashPassword(model.Password);
+
+            _mapper.Map(model, user);
+            _context.Users.Update(user);
+            _context.SaveChanges();
+        }
+
+
         public AuthenticateResponse Authenticate(AuthenticateRequest model)
         {
             var user = _context.Users.SingleOrDefault(x => x.Username == model.Username);
@@ -80,24 +98,6 @@ namespace Api.Services
 
             // save user
             _context.Users.Add(user);
-            _context.SaveChanges();
-        }
-
-        public void Update(int id, UpdateRequest model)
-        {
-            var user = GetUser(id);
-
-            // validate
-            if (model.Username != user.Username && _context.Users.Any(x => x.Username == model.Username))
-                throw new AppException("Username '" + model.Username + "' is already taken");
-
-            // hash password if it was entered
-            if (!string.IsNullOrEmpty(model.Password))
-                user.PasswordHash = BCrypt.Net.BCrypt.HashPassword(model.Password);
-
-            // copy model to user and save
-            _mapper.Map(model, user);
-            _context.Users.Update(user);
             _context.SaveChanges();
         }
 

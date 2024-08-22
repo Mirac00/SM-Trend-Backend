@@ -13,6 +13,8 @@ namespace Api.Services
         void Create(CreatePostRequest model, int userId);
         IEnumerable<PostResponse> GetAllWithUser();
         PostResponse GetById(int id);
+        IEnumerable<PostResponse> GetPostsByUser(int userId);  // Nowa metoda
+        IEnumerable<PostResponse> GetLikedPostsByUser(int userId); // Nowa metoda
         void Update(int id, UpdatePostRequest model, int userId);
         void Delete(int id, int userId);
         void AddFileToPost(int postId, PostFileRequest model);
@@ -112,7 +114,7 @@ namespace Api.Services
                     Id = post.User.Id,
                     FirstName = post.User.FirstName,
                     LastName = post.User.LastName,
-                    Username = post.User.Username
+                    Username = post.User.Username  // Poprawione: tutaj używamy `post.User.Username`
                 },
                 Files = post.Files.Select(f => new PostFileResponse
                 {
@@ -127,6 +129,80 @@ namespace Api.Services
             };
 
             return postResponse;
+        }
+
+
+        public IEnumerable<PostResponse> GetPostsByUser(int userId)
+        {
+            var posts = _context.Posts
+                .Include(p => p.User)
+                .Include(p => p.Files)
+                .Where(p => p.UserId == userId)
+                .ToList();
+
+            return posts.Select(p => new PostResponse
+            {
+                Id = p.Id,
+                Title = p.Title,
+                Content = p.Content,
+                UserId = p.UserId,
+                User = new UserResponse
+                {
+                    Id = p.User.Id,
+                    FirstName = p.User.FirstName,
+                    LastName = p.User.LastName,
+                    Username = p.User.Username
+                },
+                Files = p.Files.Select(f => new PostFileResponse
+                {
+                    Id = f.Id,
+                    FileName = f.FileName,
+                    FileType = f.FileType,
+                    FileUrl = GenerateFileUrl(f),
+                    PostId = f.PostId
+                }).ToList(),
+                Likes = _context.PostLikeDislikes.Count(l => l.PostId == p.Id && l.IsLike),
+                Dislikes = _context.PostLikeDislikes.Count(l => l.PostId == p.Id && !l.IsLike)
+            }).ToList();
+        }
+
+        public IEnumerable<PostResponse> GetLikedPostsByUser(int userId)
+        {
+            var likedPostIds = _context.PostLikeDislikes
+                .Where(ld => ld.UserId == userId && ld.IsLike)
+                .Select(ld => ld.PostId)
+                .ToList();
+
+            var posts = _context.Posts
+                .Include(p => p.User)
+                .Include(p => p.Files)
+                .Where(p => likedPostIds.Contains(p.Id))
+                .ToList();
+
+            return posts.Select(p => new PostResponse
+            {
+                Id = p.Id,
+                Title = p.Title,
+                Content = p.Content,
+                UserId = p.UserId,
+                User = new UserResponse
+                {
+                    Id = p.User.Id,
+                    FirstName = p.User.FirstName,
+                    LastName = p.User.LastName,
+                    Username = p.User.Username
+                },
+                Files = p.Files.Select(f => new PostFileResponse
+                {
+                    Id = f.Id,
+                    FileName = f.FileName,
+                    FileType = f.FileType,
+                    FileUrl = GenerateFileUrl(f),
+                    PostId = f.PostId
+                }).ToList(),
+                Likes = _context.PostLikeDislikes.Count(l => l.PostId == p.Id && l.IsLike),
+                Dislikes = _context.PostLikeDislikes.Count(l => l.PostId == p.Id && !l.IsLike)
+            }).ToList();
         }
 
         public IEnumerable<PostResponse> GetTopLikedPosts()

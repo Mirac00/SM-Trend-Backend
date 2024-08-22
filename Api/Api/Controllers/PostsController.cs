@@ -32,12 +32,27 @@ namespace Api.Controllers
             var posts = _postService.GetAllWithUser();
             return Ok(posts);
         }
+
         [AllowAnonymous]
         [HttpGet("{id}")]
         public IActionResult GetById(int id)
         {
             var post = _postService.GetById(id);
             return Ok(post);
+        }
+
+        [HttpGet("user/{userId}")]
+        public IActionResult GetPostsByUser(int userId)
+        {
+            var posts = _postService.GetPostsByUser(userId);
+            return Ok(posts);
+        }
+
+        [HttpGet("liked/{userId}")]
+        public IActionResult GetLikedPostsByUser(int userId)
+        {
+            var posts = _postService.GetLikedPostsByUser(userId);
+            return Ok(posts);
         }
 
         [HttpPut("{id}")]
@@ -111,7 +126,6 @@ namespace Api.Controllers
             var posts = _postService.GetTopLikedPosts();
             return Ok(posts);
         }
-
 
         private int GetUserIdFromToken()
         {

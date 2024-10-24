@@ -13,8 +13,8 @@ namespace Api.Services
         void Create(CreatePostRequest model, int userId);
         IEnumerable<PostResponse> GetAllWithUser();
         PostResponse GetById(int id);
-        IEnumerable<PostResponse> GetPostsByUser(int userId);  // Nowa metoda
-        IEnumerable<PostResponse> GetLikedPostsByUser(int userId); // Nowa metoda
+        IEnumerable<PostResponse> GetPostsByUser(int userId);
+        IEnumerable<PostResponse> GetLikedPostsByUser(int userId);
         void Update(int id, UpdatePostRequest model, int userId);
         void Delete(int id, int userId);
         void AddFileToPost(int postId, PostFileRequest model);
@@ -24,6 +24,7 @@ namespace Api.Services
         void LikePost(PostLikeDislikeRequest model);
         void DislikePost(PostLikeDislikeRequest model);
         IEnumerable<PostResponse> GetTopLikedPosts();
+        bool? GetUserLikeStatus(int postId, int userId); // Dodana metoda
     }
 
     public class PostService : IPostService
@@ -54,42 +55,21 @@ namespace Api.Services
             _context.Posts.Add(post);
             _context.SaveChanges();
 
-            foreach (var file in post.Files)
+            if (post.Files != null)
             {
-                file.FileUrl = GenerateFileUrl(file); // Aktualizacja URL po zapisaniu
-                _context.PostFiles.Update(file);
+                foreach (var file in post.Files)
+                {
+                    file.FileUrl = GenerateFileUrl(file); // Aktualizacja URL po zapisaniu
+                    _context.PostFiles.Update(file);
+                }
+                _context.SaveChanges();
             }
-            _context.SaveChanges();
         }
 
         public IEnumerable<PostResponse> GetAllWithUser()
         {
             var posts = _context.Posts.Include(p => p.User).Include(p => p.Files).ToList();
-            var postResponses = posts.Select(p => new PostResponse
-            {
-                Id = p.Id,
-                Title = p.Title,
-                Content = p.Content,
-                UserId = p.UserId,
-                User = new UserResponse
-                {
-                    Id = p.User.Id,
-                    FirstName = p.User.FirstName,
-                    LastName = p.User.LastName,
-                    Username = p.User.Username
-                },
-                Files = p.Files.Select(f => new PostFileResponse
-                {
-                    Id = f.Id,
-                    FileName = f.FileName,
-                    FileType = f.FileType,
-                    FileUrl = GenerateFileUrl(f),
-                    PostId = f.PostId
-                }).ToList(),
-                Likes = _context.PostLikeDislikes.Count(l => l.PostId == p.Id && l.IsLike),
-                Dislikes = _context.PostLikeDislikes.Count(l => l.PostId == p.Id && !l.IsLike)
-            }).ToList();
-
+            var postResponses = posts.Select(p => MapPostToResponse(p)).ToList();
             return postResponses;
         }
 
@@ -103,34 +83,9 @@ namespace Api.Services
             if (post == null)
                 throw new KeyNotFoundException("Post not found");
 
-            var postResponse = new PostResponse
-            {
-                Id = post.Id,
-                Title = post.Title,
-                Content = post.Content,
-                UserId = post.UserId,
-                User = new UserResponse
-                {
-                    Id = post.User.Id,
-                    FirstName = post.User.FirstName,
-                    LastName = post.User.LastName,
-                    Username = post.User.Username  // Poprawione: tutaj używamy `post.User.Username`
-                },
-                Files = post.Files.Select(f => new PostFileResponse
-                {
-                    Id = f.Id,
-                    FileName = f.FileName,
-                    FileType = f.FileType,
-                    FileUrl = GenerateFileUrl(f),
-                    PostId = f.PostId
-                }).ToList(),
-                Likes = _context.PostLikeDislikes.Count(l => l.PostId == post.Id && l.IsLike),
-                Dislikes = _context.PostLikeDislikes.Count(l => l.PostId == post.Id && !l.IsLike)
-            };
-
+            var postResponse = MapPostToResponse(post);
             return postResponse;
         }
-
 
         public IEnumerable<PostResponse> GetPostsByUser(int userId)
         {
@@ -140,30 +95,7 @@ namespace Api.Services
                 .Where(p => p.UserId == userId)
                 .ToList();
 
-            return posts.Select(p => new PostResponse
-            {
-                Id = p.Id,
-                Title = p.Title,
-                Content = p.Content,
-                UserId = p.UserId,
-                User = new UserResponse
-                {
-                    Id = p.User.Id,
-                    FirstName = p.User.FirstName,
-                    LastName = p.User.LastName,
-                    Username = p.User.Username
-                },
-                Files = p.Files.Select(f => new PostFileResponse
-                {
-                    Id = f.Id,
-                    FileName = f.FileName,
-                    FileType = f.FileType,
-                    FileUrl = GenerateFileUrl(f),
-                    PostId = f.PostId
-                }).ToList(),
-                Likes = _context.PostLikeDislikes.Count(l => l.PostId == p.Id && l.IsLike),
-                Dislikes = _context.PostLikeDislikes.Count(l => l.PostId == p.Id && !l.IsLike)
-            }).ToList();
+            return posts.Select(p => MapPostToResponse(p)).ToList();
         }
 
         public IEnumerable<PostResponse> GetLikedPostsByUser(int userId)
@@ -179,30 +111,7 @@ namespace Api.Services
                 .Where(p => likedPostIds.Contains(p.Id))
                 .ToList();
 
-            return posts.Select(p => new PostResponse
-            {
-                Id = p.Id,
-                Title = p.Title,
-                Content = p.Content,
-                UserId = p.UserId,
-                User = new UserResponse
-                {
-                    Id = p.User.Id,
-                    FirstName = p.User.FirstName,
-                    LastName = p.User.LastName,
-                    Username = p.User.Username
-                },
-                Files = p.Files.Select(f => new PostFileResponse
-                {
-                    Id = f.Id,
-                    FileName = f.FileName,
-                    FileType = f.FileType,
-                    FileUrl = GenerateFileUrl(f),
-                    PostId = f.PostId
-                }).ToList(),
-                Likes = _context.PostLikeDislikes.Count(l => l.PostId == p.Id && l.IsLike),
-                Dislikes = _context.PostLikeDislikes.Count(l => l.PostId == p.Id && !l.IsLike)
-            }).ToList();
+            return posts.Select(p => MapPostToResponse(p)).ToList();
         }
 
         public IEnumerable<PostResponse> GetTopLikedPosts()
@@ -214,31 +123,7 @@ namespace Api.Services
                 .Take(10)
                 .ToList();
 
-            var postResponses = posts.Select(p => new PostResponse
-            {
-                Id = p.Id,
-                Title = p.Title,
-                Content = p.Content,
-                UserId = p.UserId,
-                User = new UserResponse
-                {
-                    Id = p.User.Id,
-                    FirstName = p.User.FirstName,
-                    LastName = p.User.LastName,
-                    Username = p.User.Username
-                },
-                Files = p.Files.Select(f => new PostFileResponse
-                {
-                    Id = f.Id,
-                    FileName = f.FileName,
-                    FileType = f.FileType,
-                    FileUrl = GenerateFileUrl(f),
-                    PostId = f.PostId
-                }).ToList(),
-                Likes = _context.PostLikeDislikes.Count(l => l.PostId == p.Id && l.IsLike),
-                Dislikes = _context.PostLikeDislikes.Count(l => l.PostId == p.Id && !l.IsLike)
-            }).ToList();
-
+            var postResponses = posts.Select(p => MapPostToResponse(p)).ToList();
             return postResponses;
         }
 
@@ -267,12 +152,15 @@ namespace Api.Services
             _context.Posts.Update(post);
             _context.SaveChanges();
 
-            foreach (var file in post.Files)
+            if (post.Files != null)
             {
-                file.FileUrl = GenerateFileUrl(file); // Aktualizacja URL po zapisaniu
-                _context.PostFiles.Update(file);
+                foreach (var file in post.Files)
+                {
+                    file.FileUrl = GenerateFileUrl(file); // Aktualizacja URL po zapisaniu
+                    _context.PostFiles.Update(file);
+                }
+                _context.SaveChanges();
             }
-            _context.SaveChanges();
         }
 
         public void Delete(int id, int userId)
@@ -342,31 +230,7 @@ namespace Api.Services
             }
 
             var posts = query.ToList();
-            var postResponses = posts.Select(p => new PostResponse
-            {
-                Id = p.Id,
-                Title = p.Title,
-                Content = p.Content,
-                UserId = p.UserId,
-                User = new UserResponse
-                {
-                    Id = p.User.Id,
-                    FirstName = p.User.FirstName,
-                    LastName = p.User.LastName,
-                    Username = p.User.Username
-                },
-                Files = p.Files.Select(f => new PostFileResponse
-                {
-                    Id = f.Id,
-                    FileName = f.FileName,
-                    FileType = f.FileType,
-                    FileUrl = GenerateFileUrl(f),
-                    PostId = f.PostId
-                }).ToList(),
-                Likes = _context.PostLikeDislikes.Count(l => l.PostId == p.Id && l.IsLike),
-                Dislikes = _context.PostLikeDislikes.Count(l => l.PostId == p.Id && !l.IsLike)
-            }).ToList();
-
+            var postResponses = posts.Select(p => MapPostToResponse(p)).ToList();
             return postResponses;
         }
 
@@ -377,9 +241,16 @@ namespace Api.Services
 
             if (existingLike != null)
             {
-                if (existingLike.IsLike) return;
-
-                existingLike.IsLike = true;
+                if (existingLike.IsLike)
+                {
+                    // Użytkownik chce usunąć swojego "like"
+                    _context.PostLikeDislikes.Remove(existingLike);
+                }
+                else
+                {
+                    // Użytkownik miał "dislike", teraz chce "like"
+                    existingLike.IsLike = true;
+                }
             }
             else
             {
@@ -395,7 +266,7 @@ namespace Api.Services
 
             _context.SaveChanges();
 
-            // Aktualizacja liczników like'ów i dislike'ów
+            // Aktualizacja liczników
             UpdatePostLikeDislikeCounts(model.PostId);
         }
 
@@ -406,9 +277,16 @@ namespace Api.Services
 
             if (existingLike != null)
             {
-                if (!existingLike.IsLike) return;
-
-                existingLike.IsLike = false;
+                if (!existingLike.IsLike)
+                {
+                    // Użytkownik chce usunąć swojego "dislike"
+                    _context.PostLikeDislikes.Remove(existingLike);
+                }
+                else
+                {
+                    // Użytkownik miał "like", teraz chce "dislike"
+                    existingLike.IsLike = false;
+                }
             }
             else
             {
@@ -424,9 +302,19 @@ namespace Api.Services
 
             _context.SaveChanges();
 
-            // Aktualizacja liczników like'ów i dislike'ów
+            // Aktualizacja liczników
             UpdatePostLikeDislikeCounts(model.PostId);
         }
+
+        public bool? GetUserLikeStatus(int postId, int userId)
+        {
+            var likeDislike = _context.PostLikeDislikes.FirstOrDefault(ld => ld.PostId == postId && ld.UserId == userId);
+            if (likeDislike == null)
+                return null;
+            return likeDislike.IsLike;
+        }
+
+        // Pomocnicze metody
 
         private Post GetPost(int id)
         {
@@ -453,6 +341,34 @@ namespace Api.Services
         {
             // Przykład generowania URL - dostosuj go do swoich potrzeb
             return $"https://localhost:44352/Posts/{file.PostId}/files/{file.Id}";
+        }
+
+        private PostResponse MapPostToResponse(Post post)
+        {
+            return new PostResponse
+            {
+                Id = post.Id,
+                Title = post.Title,
+                Content = post.Content,
+                UserId = post.UserId,
+                User = new UserResponse
+                {
+                    Id = post.User.Id,
+                    FirstName = post.User.FirstName,
+                    LastName = post.User.LastName,
+                    Username = post.User.Username
+                },
+                Files = post.Files.Select(f => new PostFileResponse
+                {
+                    Id = f.Id,
+                    FileName = f.FileName,
+                    FileType = f.FileType,
+                    FileUrl = GenerateFileUrl(f),
+                    PostId = f.PostId
+                }).ToList(),
+                Likes = _context.PostLikeDislikes.Count(l => l.PostId == post.Id && l.IsLike),
+                Dislikes = _context.PostLikeDislikes.Count(l => l.PostId == post.Id && !l.IsLike)
+            };
         }
     }
 }

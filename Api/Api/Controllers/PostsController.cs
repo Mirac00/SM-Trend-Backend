@@ -119,6 +119,14 @@ namespace Api.Controllers
             return Ok(new { message = "Post disliked successfully" });
         }
 
+        [HttpGet("{postId}/like-status")]
+        public IActionResult GetUserLikeStatus(int postId)
+        {
+            var userId = GetUserIdFromToken();
+            var status = _postService.GetUserLikeStatus(postId, userId);
+            return Ok(new { isLike = status });
+        }
+
         [AllowAnonymous]
         [HttpGet("top-liked")]
         public IActionResult GetTopLikedPosts()

@@ -34,25 +34,33 @@ namespace Api.Controllers
         }
 
         [AllowAnonymous]
-        [HttpGet("{id}")]
-        public IActionResult GetById(int id)
+        [HttpGet("filtered")]
+        public IActionResult GetFilteredPosts([FromQuery] string fileType, [FromQuery] string searchTerm)
         {
-            var post = _postService.GetById(id);
-            return Ok(post);
+            var posts = _postService.GetFilteredPosts(fileType, searchTerm);
+            return Ok(posts);
         }
 
-        [HttpGet("user/{userId}")]
+        [HttpGet("user/{userId:int}")]
         public IActionResult GetPostsByUser(int userId)
         {
             var posts = _postService.GetPostsByUser(userId);
             return Ok(posts);
         }
 
-        [HttpGet("liked/{userId}")]
+        [HttpGet("liked/{userId:int}")]
         public IActionResult GetLikedPostsByUser(int userId)
         {
             var posts = _postService.GetLikedPostsByUser(userId);
             return Ok(posts);
+        }
+
+        [AllowAnonymous]
+        [HttpGet("{id:int}")]
+        public IActionResult GetById(int id)
+        {
+            var post = _postService.GetById(id);
+            return Ok(post);
         }
 
         [HttpPut("{id}")]
@@ -71,51 +79,44 @@ namespace Api.Controllers
             return Ok(new { message = "Post deleted successfully" });
         }
 
-        [HttpPost("{postId}/files")]
-        public IActionResult AddFileToPost(int postId, [FromBody] PostFileRequest model)
-        {
-            _postService.AddFileToPost(postId, model);
-            return Ok(new { message = "File added successfully" });
-        }
-
-        [HttpDelete("{postId}/files/{fileId}")]
-        public IActionResult RemoveFileFromPost(int postId, int fileId)
-        {
-            _postService.RemoveFileFromPost(postId, fileId);
-            return Ok(new { message = "File removed successfully" });
-        }
-
         [AllowAnonymous]
-        [HttpGet("{postId}/files/{fileId}")]
-        public IActionResult GetFile(int postId, int fileId)
+        [HttpGet("{postId}/files/{fileId}/content")]
+        public IActionResult GetFileContent(int postId, int fileId)
         {
+            var file = _postService.GetFile(postId, fileId);
+            return File(file.FileContent, file.FileType);
+        }
+
+        [HttpGet("{postId}/files/{fileId}/download")]
+        public IActionResult DownloadFile(int postId, int fileId)
+        {
+            var userId = GetUserIdFromToken();
+            if (userId == 0)
+                return Unauthorized();
+
             var file = _postService.GetFile(postId, fileId);
             return File(file.FileContent, file.FileType, file.FileName);
         }
 
-        [AllowAnonymous]
-        [HttpGet("filter")]
-        public IActionResult GetFilteredPosts([FromQuery] string fileType, [FromQuery] string searchTerm)
-        {
-            var posts = _postService.GetFilteredPosts(fileType, searchTerm);
-            return Ok(posts);
-        }
-
-        [HttpPost("like")]
-        public IActionResult LikePost([FromBody] PostLikeDislikeRequest model)
+        [HttpPost("{postId}/like")]
+        public IActionResult LikePost(int postId)
         {
             var userId = GetUserIdFromToken();
-            model.UserId = userId;
-            _postService.LikePost(model);
+            if (userId == 0)
+                return Unauthorized();
+
+            _postService.LikePost(new PostLikeDislikeRequest { PostId = postId, UserId = userId });
             return Ok(new { message = "Post liked successfully" });
         }
 
-        [HttpPost("dislike")]
-        public IActionResult DislikePost([FromBody] PostLikeDislikeRequest model)
+        [HttpPost("{postId}/dislike")]
+        public IActionResult DislikePost(int postId)
         {
             var userId = GetUserIdFromToken();
-            model.UserId = userId;
-            _postService.DislikePost(model);
+            if (userId == 0)
+                return Unauthorized();
+
+            _postService.DislikePost(new PostLikeDislikeRequest { PostId = postId, UserId = userId });
             return Ok(new { message = "Post disliked successfully" });
         }
 
@@ -123,10 +124,57 @@ namespace Api.Controllers
         public IActionResult GetUserLikeStatus(int postId)
         {
             var userId = GetUserIdFromToken();
-            var status = _postService.GetUserLikeStatus(postId, userId);
-            return Ok(new { isLike = status });
+            if (userId == 0)
+                return Unauthorized();
+
+            var isLike = _postService.GetUserLikeStatus(postId, userId);
+            return Ok(new { isLike });
         }
 
+        [AllowAnonymous]
+        [HttpGet("{postId}/files/{fileId}/thumbnail")]
+        public IActionResult GetFileThumbnail(int postId, int fileId)
+        {
+            var file = _postService.GetFile(postId, fileId);
+            if (file.FileType.StartsWith("image/"))
+            {
+                return File(file.FileContent, file.FileType);
+            }
+            else
+            {
+                // Możesz zwrócić domyślną miniaturkę dla innych typów plików
+                return NotFound();
+            }
+        }
+
+        // Dodany endpoint do usuwania pliku z posta
+        [HttpDelete("{postId}/files/{fileId}")]
+        public IActionResult RemoveFileFromPost(int postId, int fileId)
+        {
+            var userId = GetUserIdFromToken();
+            if (userId == 0)
+                return Unauthorized();
+
+            try
+            {
+                _postService.RemoveFileFromPost(postId, fileId, userId);
+                return Ok(new { message = "File removed from post successfully" });
+            }
+            catch (KeyNotFoundException ex)
+            {
+                return NotFound(new { message = ex.Message });
+            }
+            catch (UnauthorizedAccessException)
+            {
+                return Forbid();
+            }
+            catch (Exception ex)
+            {
+                return BadRequest(new { message = ex.Message });
+            }
+        }
+
+        // Dodany endpoint do pobierania top 10 najbardziej lajkowanych postów
         [AllowAnonymous]
         [HttpGet("top-liked")]
         public IActionResult GetTopLikedPosts()

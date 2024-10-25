@@ -18,13 +18,13 @@ namespace Api.Services
         void Update(int id, UpdatePostRequest model, int userId);
         void Delete(int id, int userId);
         void AddFileToPost(int postId, PostFileRequest model);
-        void RemoveFileFromPost(int postId, int fileId);
+        void RemoveFileFromPost(int postId, int fileId, int userId);
         PostFile GetFile(int postId, int fileId);
         IEnumerable<PostResponse> GetFilteredPosts(string fileType, string searchTerm);
         void LikePost(PostLikeDislikeRequest model);
         void DislikePost(PostLikeDislikeRequest model);
         IEnumerable<PostResponse> GetTopLikedPosts();
-        bool? GetUserLikeStatus(int postId, int userId); // Dodana metoda
+        bool? GetUserLikeStatus(int postId, int userId);
     }
 
     public class PostService : IPostService
@@ -42,26 +42,31 @@ namespace Api.Services
             {
                 Title = model.Title,
                 Content = model.Content,
+                Category = model.Category,
                 UserId = userId,
-                Files = model.Files?.Select(f => new PostFile
-                {
-                    FileName = f.FileName,
-                    FileType = f.FileType,
-                    FileContent = Convert.FromBase64String(f.FileContent),
-                    FileUrl = GenerateFileUrl(new PostFile { PostId = 0, Id = 0 }) // Placeholder URL
-                }).ToList()
             };
+
+            if (model.File != null)
+            {
+                var file = new PostFile
+                {
+                    FileName = model.File.FileName,
+                    FileType = model.File.FileType,
+                    FileContent = Convert.FromBase64String(model.File.FileContent),
+                    FileUrl = GenerateFileUrl(new PostFile { PostId = 0, Id = 0 }),
+                };
+                post.Files.Add(file);
+            }
 
             _context.Posts.Add(post);
             _context.SaveChanges();
 
-            if (post.Files != null)
+            // Aktualizacja URL pliku po zapisaniu
+            if (post.Files.Any())
             {
-                foreach (var file in post.Files)
-                {
-                    file.FileUrl = GenerateFileUrl(file); // Aktualizacja URL po zapisaniu
-                    _context.PostFiles.Update(file);
-                }
+                var file = post.Files.First();
+                file.FileUrl = GenerateFileUrl(file);
+                _context.PostFiles.Update(file);
                 _context.SaveChanges();
             }
         }
@@ -119,7 +124,7 @@ namespace Api.Services
             var posts = _context.Posts
                 .Include(p => p.User)
                 .Include(p => p.Files)
-                .OrderByDescending(p => _context.PostLikeDislikes.Count(l => l.PostId == p.Id && l.IsLike))
+                .OrderByDescending(p => p.Likes)
                 .Take(10)
                 .ToList();
 
@@ -129,34 +134,45 @@ namespace Api.Services
 
         public void Update(int id, UpdatePostRequest model, int userId)
         {
-            var post = GetPost(id);
+            var post = _context.Posts.Include(p => p.Files).FirstOrDefault(p => p.Id == id);
+
+            if (post == null)
+                throw new KeyNotFoundException("Post not found");
 
             if (post.UserId != userId)
                 throw new UnauthorizedAccessException("You are not authorized to update this post");
 
             post.Title = model.Title;
             post.Content = model.Content;
+            post.Category = model.Category;
 
-            if (model.Files != null)
+            if (model.File != null)
             {
-                post.Files = model.Files.Select(f => new PostFile
+                // Usunięcie istniejących plików
+                var existingFiles = _context.PostFiles.Where(f => f.PostId == id).ToList();
+                _context.PostFiles.RemoveRange(existingFiles);
+
+                // Dodanie nowego pliku
+                var file = new PostFile
                 {
-                    FileName = f.FileName,
-                    FileType = f.FileType,
-                    FileContent = Convert.FromBase64String(f.FileContent),
+                    FileName = model.File.FileName,
+                    FileType = model.File.FileType,
+                    FileContent = Convert.FromBase64String(model.File.FileContent),
                     PostId = id,
-                    FileUrl = GenerateFileUrl(new PostFile { PostId = id, Id = 0 }) // Placeholder URL
-                }).ToList();
+                    FileUrl = GenerateFileUrl(new PostFile { PostId = id, Id = 0 }),
+                };
+                _context.PostFiles.Add(file);
             }
 
             _context.Posts.Update(post);
             _context.SaveChanges();
 
-            if (post.Files != null)
+            // Aktualizacja URL plików po zapisaniu
+            if (post.Files.Any())
             {
                 foreach (var file in post.Files)
                 {
-                    file.FileUrl = GenerateFileUrl(file); // Aktualizacja URL po zapisaniu
+                    file.FileUrl = GenerateFileUrl(file);
                     _context.PostFiles.Update(file);
                 }
                 _context.SaveChanges();
@@ -165,10 +181,19 @@ namespace Api.Services
 
         public void Delete(int id, int userId)
         {
-            var post = GetPost(id);
+            var post = _context.Posts.Include(p => p.Files).FirstOrDefault(p => p.Id == id);
+
+            if (post == null)
+                throw new KeyNotFoundException("Post not found");
 
             if (post.UserId != userId)
                 throw new UnauthorizedAccessException("You are not authorized to delete this post");
+
+            // Usunięcie powiązanych plików
+            if (post.Files.Any())
+            {
+                _context.PostFiles.RemoveRange(post.Files);
+            }
 
             _context.Posts.Remove(post);
             _context.SaveChanges();
@@ -176,28 +201,40 @@ namespace Api.Services
 
         public void AddFileToPost(int postId, PostFileRequest model)
         {
-            var post = GetPost(postId);
+            var post = _context.Posts.FirstOrDefault(p => p.Id == postId);
+            if (post == null)
+                throw new KeyNotFoundException("Post not found");
+
             var file = new PostFile
             {
                 FileName = model.FileName,
                 FileType = model.FileType,
                 FileContent = Convert.FromBase64String(model.FileContent),
                 PostId = postId,
-                FileUrl = GenerateFileUrl(new PostFile { PostId = postId, Id = 0 }) // Placeholder URL
+                FileUrl = GenerateFileUrl(new PostFile { PostId = postId, Id = 0 }),
             };
 
             _context.PostFiles.Add(file);
             _context.SaveChanges();
 
-            file.FileUrl = GenerateFileUrl(file); // Aktualizacja URL po zapisaniu
+            file.FileUrl = GenerateFileUrl(file);
             _context.PostFiles.Update(file);
             _context.SaveChanges();
         }
 
-        public void RemoveFileFromPost(int postId, int fileId)
+        public void RemoveFileFromPost(int postId, int fileId, int userId)
         {
-            var file = _context.PostFiles.FirstOrDefault(f => f.PostId == postId && f.Id == fileId);
-            if (file == null) throw new KeyNotFoundException("File not found");
+            var post = _context.Posts.Include(p => p.Files).FirstOrDefault(p => p.Id == postId);
+
+            if (post == null)
+                throw new KeyNotFoundException("Post not found");
+
+            if (post.UserId != userId)
+                throw new UnauthorizedAccessException("You are not authorized to modify this post");
+
+            var file = post.Files.FirstOrDefault(f => f.Id == fileId);
+            if (file == null)
+                throw new KeyNotFoundException("File not found");
 
             _context.PostFiles.Remove(file);
             _context.SaveChanges();
@@ -209,7 +246,7 @@ namespace Api.Services
             if (file == null)
                 throw new KeyNotFoundException("File not found");
 
-            file.FileUrl = GenerateFileUrl(file); // Ustaw URL pliku
+            file.FileUrl = GenerateFileUrl(file);
             return file;
         }
 
@@ -316,15 +353,6 @@ namespace Api.Services
 
         // Pomocnicze metody
 
-        private Post GetPost(int id)
-        {
-            var post = _context.Posts.Find(id);
-            if (post == null)
-                throw new KeyNotFoundException("Post not found");
-
-            return post;
-        }
-
         private void UpdatePostLikeDislikeCounts(int postId)
         {
             var post = _context.Posts.FirstOrDefault(p => p.Id == postId);
@@ -350,6 +378,7 @@ namespace Api.Services
                 Id = post.Id,
                 Title = post.Title,
                 Content = post.Content,
+                Category = post.Category,
                 UserId = post.UserId,
                 User = new UserResponse
                 {
@@ -366,8 +395,8 @@ namespace Api.Services
                     FileUrl = GenerateFileUrl(f),
                     PostId = f.PostId
                 }).ToList(),
-                Likes = _context.PostLikeDislikes.Count(l => l.PostId == post.Id && l.IsLike),
-                Dislikes = _context.PostLikeDislikes.Count(l => l.PostId == post.Id && !l.IsLike)
+                Likes = post.Likes,
+                Dislikes = post.Dislikes
             };
         }
     }

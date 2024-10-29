@@ -1,4 +1,5 @@
-﻿using Microsoft.Extensions.Options;
+﻿// JwtUtils.cs
+using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
 using System;
 using System.IdentityModel.Tokens.Jwt;
@@ -32,7 +33,7 @@ namespace Api.Authorization
             var tokenDescriptor = new SecurityTokenDescriptor
             {
                 Subject = new ClaimsIdentity(new[] { new Claim("id", user.Id.ToString()) }),
-                Expires = DateTime.UtcNow.AddHours(1), // Set the token expiration time
+                Expires = DateTime.UtcNow.AddHours(1), // Ustawienie na 20 minut
                 SigningCredentials = new SigningCredentials(new SymmetricSecurityKey(key), SecurityAlgorithms.HmacSha256Signature)
             };
 
@@ -68,7 +69,7 @@ namespace Api.Authorization
 
                 return userId;
             }
-            catch (Exception ex)
+            catch (Exception)
             {
                 // Handle exceptions here (e.g., log them)
                 return null;

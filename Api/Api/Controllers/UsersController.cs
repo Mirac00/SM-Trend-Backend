@@ -1,10 +1,12 @@
-﻿using AutoMapper;
+﻿// UsersController.cs
+using AutoMapper;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.Extensions.Options;
-using Api.Authorization;
 using Api.Helpers;
 using Api.Models.Users;
 using Api.Services;
+using System.Linq;
+using Microsoft.Extensions.Options;
 
 namespace Api.Controllers
 {
@@ -81,6 +83,7 @@ namespace Api.Controllers
             _userService.Delete(id);
             return Ok(new { message = "User deleted successfully" });
         }
+
         [HttpPut("{id}/update-profile")]
         public IActionResult UpdateProfile(int id, UpdateRequest model)
         {
@@ -88,5 +91,22 @@ namespace Api.Controllers
             return Ok(new { message = "Profile updated successfully" });
         }
 
+        // Nowy endpoint do odświeżania tokenu
+        [AllowAnonymous]
+        [HttpPost("RefreshToken")]
+        public IActionResult RefreshToken()
+        {
+            var authHeader = HttpContext.Request.Headers["Authorization"].FirstOrDefault();
+            if (string.IsNullOrEmpty(authHeader))
+                return BadRequest(new { message = "Token is required" });
+
+            var token = authHeader.Split(" ").Last();
+            var newToken = _userService.RefreshToken(token);
+
+            if (string.IsNullOrEmpty(newToken))
+                return Unauthorized(new { message = "Invalid token" });
+
+            return Ok(new { token = newToken });
+        }
     }
 }

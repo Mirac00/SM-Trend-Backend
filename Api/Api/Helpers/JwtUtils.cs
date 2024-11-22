@@ -33,7 +33,7 @@ namespace Api.Authorization
             var tokenDescriptor = new SecurityTokenDescriptor
             {
                 Subject = new ClaimsIdentity(new[] { new Claim("id", user.Id.ToString()) }),
-                Expires = DateTime.UtcNow.AddHours(1), // Ustawienie na 20 minut
+                Expires = DateTime.UtcNow.AddMinutes(20), // Ustawienie na 20 minut
                 SigningCredentials = new SigningCredentials(new SymmetricSecurityKey(key), SecurityAlgorithms.HmacSha256Signature)
             };
 
